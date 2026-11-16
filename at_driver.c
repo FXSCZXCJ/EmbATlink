@@ -163,9 +163,43 @@ static void at_urc_harvest(uint8_t channel)
             continue;
         }
 
+        body_at = (uint16_t)(pos + hlen);
+
+        /* 长度模式：head 之后是 "<len>,"（可选 '"'），按长度精确取二进制记录 */
+        if (cfg->urc_keys[idx].bin_len) {
+            uint16_t q   = body_at;
+            uint32_t blen = 0u;
+            uint8_t  got  = 0u;
+
+            while (q < end && (cfg->recv_buf[q] == ' ' || cfg->recv_buf[q] == '"'))
+                q++;
+            while (q < end && cfg->recv_buf[q] >= '0' && cfg->recv_buf[q] <= '9') {
+                blen = blen * 10u + (uint32_t)(cfg->recv_buf[q] - '0');
+                q++;
+                got = 1u;
+                if (blen > 2048u) break;
+            }
+            if (q >= end) { r->scan = pos; return; }   /* 长度字段未收全 */
+            if (got == 0u || cfg->recv_buf[q] != ',') { pos++; r->scan = pos; continue; }
+            q++;
+            if (cfg->urc_keys[idx].bin_quote && q < end && cfg->recv_buf[q] == '"')
+                q++;
+            if ((uint32_t)(end - q) < blen) { r->scan = pos; return; } /* 数据未到齐 */
+
+            (void)at_urc_push(channel, idx, cfg->recv_buf + q, (uint16_t)blen);
+            q = (uint16_t)(q + blen);
+            if (q < end && cfg->recv_buf[q] == '"') q++;
+            while ((uint16_t)(q + 1u) < end &&
+                   cfg->recv_buf[q] == '\r' && cfg->recv_buf[q + 1u] == '\n') {
+                q = (uint16_t)(q + 2u);
+            }
+            pos = q;
+            r->scan = pos;
+            continue;
+        }
+
         /* 表头之后的第一个记录尾即本记录结束 */
         tail    = cfg->urc_keys[idx].tail;
-        body_at = (uint16_t)(pos + hlen);
         p       = at_buf_strstr(cfg->recv_buf + body_at,
                                 (uint16_t)(end - body_at), tail);
         if (p == NULL) {

@@ -73,6 +73,8 @@ typedef struct {
 typedef struct {
     const char *head;       /**< 记录起点关键字，如 "+MQTT:"   */
     const char *tail;       /**< 记录结束串，如 "\r\n"        */
+    uint8_t     bin_len;    /**< 1=按长度字段消费二进制记录，tail 忽略 */
+    uint8_t     bin_quote;  /**< 1=长度字段后可能跟一个 '"'          */
 } at_urc_key_t;
 
 /** 响应描述（调用方提供缓冲） */
