@@ -232,6 +232,14 @@ at_status_t at_cmd_exec(uint8_t channel, const at_cmd_config_t *config,
 at_status_t at_recv_push(uint8_t channel, const uint8_t *data, uint16_t len);
 
 /**
+ * @brief   回收接收区已扫描前缀（把 scan 之后的数据移到开头）
+ * @param   [in] channel: 通道号
+ * @note    仅在通道空闲（无在途 at_cmd_exec）时调用。高频 URC 场景必须
+ *          周期性调用，否则接收区写满后会被整区清零。
+ */
+void at_recv_compact(uint8_t channel);
+
+/**
  * @brief   取一条指定表项的 URC 记录（该表项中最早的一条）
  * @param   [in]  channel:   通道号
  * @param   [in]  urc_index: 要取的表项下标（urc_keys 里的枚举值）

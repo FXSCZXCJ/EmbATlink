@@ -32,8 +32,10 @@
 
 #include <stdint.h>
 
-/** 最大 AT 通道数 */
-#define AT_CHANNEL_MAX 1
+/** 最大 AT 通道数（允许项目用 -D 覆盖） */
+#ifndef AT_CHANNEL_MAX
+#define AT_CHANNEL_MAX 2
+#endif
 
 /** 日志宏 */
 #define AT_LOG_D(...)

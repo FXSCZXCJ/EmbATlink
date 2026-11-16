@@ -171,8 +171,29 @@ static void at_urc_harvest(uint8_t channel)
             uint32_t blen = 0u;
             uint8_t  got  = 0u;
 
-            while (q < end && (cfg->recv_buf[q] == ' ' || cfg->recv_buf[q] == '"'))
+            /* 头之后固定是 "<msgid>,<topic>,<len>,"：
+             * 1) 跳过 msgid（它也是数字，不能当长度用） */
+            while (q < end && cfg->recv_buf[q] == ' ') q++;
+            while (q < end && cfg->recv_buf[q] >= '0' && cfg->recv_buf[q] <= '9') q++;
+            if (q >= end) { r->scan = pos; return; }
+            if (cfg->recv_buf[q] != ',') { pos++; r->scan = pos; continue; }
+            q++;
+
+            /* 2) 跳过 topic（带引号或不带引号） */
+            if (q < end && cfg->recv_buf[q] == '"') {
                 q++;
+                while (q < end && cfg->recv_buf[q] != '"') q++;
+                if (q >= end) { r->scan = pos; return; }
+                q++;
+            } else {
+                while (q < end && cfg->recv_buf[q] != ',') q++;
+            }
+            if (q >= end) { r->scan = pos; return; }
+            if (cfg->recv_buf[q] != ',') { pos++; r->scan = pos; continue; }
+            q++;
+
+            /* 3) 读载荷长度 */
+            while (q < end && cfg->recv_buf[q] == ' ') q++;
             while (q < end && cfg->recv_buf[q] >= '0' && cfg->recv_buf[q] <= '9') {
                 blen = blen * 10u + (uint32_t)(cfg->recv_buf[q] - '0');
                 q++;
@@ -482,6 +503,31 @@ at_status_t at_recv_push(uint8_t channel, const uint8_t *data, uint16_t len)
     rt->rx_len = (uint16_t)(rt->rx_len + len);
 
     return AT_OK;
+}
+
+/* 回收已扫描前缀：把 recv_buf[scan..rx_len) 前移，避免长期不收命令时
+ * rx_len 持续增长把整个接收区清零（RTCM 等高频 URC 场景必用）。
+ * 只能在通道空闲（没有在途 at_cmd_exec）时调用。 */
+void at_recv_compact(uint8_t channel)
+{
+    if (channel >= AT_CHANNEL_MAX) return;
+    at_rt_t *rt = &s_rt[channel];
+
+    if (rt->cfg.recv_buf == NULL) return;
+    if (rt->scan == 0u) return;
+    if (rt->scan > rt->rx_len) {
+        rt->scan = 0u;
+        rt->rx_len = 0u;
+        return;
+    }
+
+    uint16_t remain = (uint16_t)(rt->rx_len - rt->scan);
+
+    if (remain > 0u && rt->scan < rt->rx_len) {
+        memmove(rt->cfg.recv_buf, rt->cfg.recv_buf + rt->scan, remain);
+    }
+    rt->rx_len = remain;
+    rt->scan   = 0u;
 }
 
 /* 取一条指定表项的 URC 记录；size 入为 buf 容量，出为记录体长度 */
